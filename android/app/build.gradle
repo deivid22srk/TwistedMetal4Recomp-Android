@@ -1,0 +1,72 @@
+plugins {
+    id 'com.android.application'
+}
+
+def sdlSourceDir = System.getenv("PSX_SDL3_SOURCE_DIR")
+
+android {
+    namespace = "com.deivid22srk.twistedmetal4"
+    compileSdk = 35
+    ndkVersion = "28.2.13676358"
+
+    defaultConfig {
+        applicationId = "com.deivid22srk.twistedmetal4"
+        minSdk = 21
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0.0"
+
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_PLATFORM=android-21",
+                          "-DANDROID_STL=c++_static",
+                          "-DPSX_SDL_BACKEND=SDL3",
+                          "-DPSX_ENABLE_VULKAN=OFF",
+                          "-DPSX_RECOMP_UI=OFF",
+                          "-DPSX_DEBUG_TOOLS=OFF",
+                          "-DPSX_GAME_VERSION=0.1.0",
+                          "-DPSXRECOMP_REQUIRE_GAME_C=ON"
+                if (sdlSourceDir) {
+                    arguments "-DFETCHCONTENT_SOURCE_DIR_SDL3=${sdlSourceDir}"
+                }
+                abiFilters 'arm64-v8a'
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+        release {
+            minifyEnabled false
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
+                    'proguard-rules.pro'
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path 'jni/CMakeLists.txt'
+            version '3.22.1'
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+        resources {
+            excludes += ['/META-INF/{AL2.0,LGPL2.1}']
+        }
+    }
+
+    lint {
+        abortOnError = false
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+}

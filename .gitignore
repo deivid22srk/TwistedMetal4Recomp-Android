@@ -7,8 +7,12 @@
 /out/
 /.happypath/
 
-# Setup-host: players Generate game C locally (CI clears generated/).
-/generated/
+# Android port: generated game C is committed so CI can build without a ROM.
+# Keep any unrelated local generation artifacts ignored.
+/generated/*
+!/generated/*.c
+!/generated/*.h
+!/generated/*.ranges
 
 # Release packaging
 /release-stage/

@@ -15,6 +15,23 @@ set(PSXRECOMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp" CACHE PATH
 # endif()
 set(PSX_SETUP_WIZARD ON CACHE BOOL
     "Advertise first-run setup wizard + Generate & rebuild in recomp-ui" FORCE)
+
+# Android is driven by the SDL3 Activity and the native document picker in
+# android/app. The desktop Dear ImGui launcher and Vulkan backend are not part
+# of the first mobile target; keeping them off avoids desktop file-dialog and
+# window-system assumptions in the APK while leaving desktop builds unchanged.
+if(ANDROID)
+    set(PSX_RECOMP_UI OFF CACHE BOOL
+        "Disable the desktop recomp-ui launcher on Android" FORCE)
+    set(PSX_ENABLE_VULKAN OFF CACHE BOOL
+        "Disable Vulkan for the first Android target" FORCE)
+    set(PSX_DEBUG_TOOLS OFF CACHE BOOL
+        "Disable TCP debug tools in Android release builds" FORCE)
+    set(PSX_STATIC_RUNTIME OFF CACHE BOOL
+        "Use the Android C++ runtime configuration" FORCE)
+    set(PSXRECOMP_REQUIRE_GAME_C ON CACHE BOOL
+        "Require generated game C for a playable Android APK" FORCE)
+endif()
 include("${PSXRECOMP_ROOT}/runtime/runtime.cmake")
 
 psxrecomp_add_game_runtime(psx-runtime
@@ -30,6 +47,14 @@ psxrecomp_add_game_runtime(psx-runtime
     GEN_FULL_GLOB "generated/SCUS_945.60_full_*.c"
     CODEGEN_SETUP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/codegen_setup.c"
 )
+
+# psxrecomp_codegen_host.c is shared with the desktop setup-host and references
+# the launcher relaunch ABI. Android intentionally has no desktop launcher; a
+# local no-op keeps that optional host code linkable without importing ImGui.
+if(NOT PSX_RECOMP_UI)
+    target_sources(psx-runtime PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/android/recomp_launcher_stub.c")
+endif()
 
 # Stage runtime configs next to the exe for direct build/ launches. Only copy
 # files that exist — never fail POST_BUILD when game_options.toml is absent.

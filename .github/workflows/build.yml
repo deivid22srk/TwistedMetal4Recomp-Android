@@ -1,0 +1,118 @@
+name: Android APK
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: twisted-metal-4-android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ANDROID_PLATFORM: android-35
+  ANDROID_BUILD_TOOLS: 35.0.0
+  ANDROID_CMAKE: 3.22.1
+  ANDROID_NDK: 28.2.13676358
+  SDL3_VERSION: 3.4.10
+  SDL3_SHA256: 12b34280415ec8418c864408b93d008a20a6530687ee613d60bfbd20411f2785
+
+jobs:
+  build:
+    name: Build arm64-v8a release APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout source and dependencies
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK/NDK/CMake
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;${ANDROID_PLATFORM}" \
+            "build-tools;${ANDROID_BUILD_TOOLS}" \
+            "cmake;${ANDROID_CMAKE}" \
+            "ndk;${ANDROID_NDK}"
+
+      - name: Cache SDL3 source
+        uses: actions/cache@v4
+        with:
+          path: .cache/sdl3-src
+          key: sdl3-${{ env.SDL3_VERSION }}-${{ env.SDL3_SHA256 }}
+
+      - name: Prefetch SDL3 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$GITHUB_WORKSPACE/.cache/sdl3-src"
+          if [[ -f "$OUT/CMakeLists.txt" ]]; then
+            echo "PSX_SDL3_SOURCE_DIR=$OUT" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          mkdir -p .cache
+          TARBALL=".cache/SDL3-${SDL3_VERSION}.tar.gz"
+          curl -fsSL --http1.1 --retry 5 --retry-all-errors --retry-delay 2 \
+            -o "$TARBALL" \
+            "https://github.com/libsdl-org/SDL/releases/download/release-${SDL3_VERSION}/SDL3-${SDL3_VERSION}.tar.gz"
+          echo "${SDL3_SHA256}  ${TARBALL}" | sha256sum -c -
+          rm -rf .cache/sdl3-extract "$OUT"
+          mkdir -p .cache/sdl3-extract
+          tar -xzf "$TARBALL" -C .cache/sdl3-extract
+          INNER="$(find .cache/sdl3-extract -mindepth 1 -maxdepth 1 -type d | head -n1)"
+          mv "$INNER" "$OUT"
+          rm -rf .cache/sdl3-extract
+          echo "PSX_SDL3_SOURCE_DIR=$OUT" >> "$GITHUB_ENV"
+
+      - name: Verify generated game sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s generated/SCUS_945.60_dispatch.c
+          test "$(find generated -maxdepth 1 -name 'SCUS_945.60_full_*.c' | wc -l)" -eq 18
+          test -s psxrecomp/generated/OpenBIOS_dispatch.c
+          echo "Generated game and OpenBIOS sources are present; no disc image is used in CI."
+
+      - name: Build release APK
+        working-directory: android
+        env:
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
+        run: ./gradlew --no-daemon --stacktrace assembleRelease
+
+      - name: Verify APK output
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          "${ANDROID_HOME}/build-tools/${ANDROID_BUILD_TOOLS}/aapt2" dump packagename "$APK" || true
+          ls -lh "$APK"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: twisted-metal-4-recompiled-android-arm64-release
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
