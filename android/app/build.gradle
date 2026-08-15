@@ -53,6 +53,10 @@ android {
         release {
             minifyEnabled false
             shrinkResources false
+            // CI/test APK: use the standard debug key so the generated APK is
+            // installable. Production distribution must provide a real signing
+            // keystore through protected GitHub secrets.
+            signingConfig signingConfigs.debug
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
                     'proguard-rules.pro'
         }
