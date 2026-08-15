@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: twisted-metal-4-android-${{ github.ref }}
@@ -148,8 +148,29 @@ jobs:
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: twisted-metal-4-recompiled-android-arm64-release
           path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish APK as GitHub Release asset
+        if: ${{ success() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APK="$(find android/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          test -n "$APK"
+          TAG="android-build-${GITHUB_SHA:0:12}"
+          TITLE="Twisted Metal 4 Android build ${GITHUB_SHA:0:12}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" "$APK" --repo "$GITHUB_REPOSITORY" \
+              --title "$TITLE" \
+              --notes "Automated arm64-v8a Android APK built by GitHub Actions."
+          fi
+          echo "Release asset published: $TAG"
