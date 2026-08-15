@@ -42,3 +42,9 @@ A causa foi identificada no caminho de BIOS. `GameActivity` passava `--game` e `
 
 Correção aplicada em `GameActivity.getArguments()`: passar `--bios <filesDir>/bios/openbios.bin` e `--memcard-dir <filesDir>/saves` explicitamente, além dos argumentos já existentes. Os avisos sobre `libdolphin.so`, `vendor.display.enable_optimal_refresh_rate`, `Unknown dataspace 0` e driver Adreno são secundários e não explicam o encerramento.
 
+## Terceiro log: retorno antecipado persiste
+
+O log `psps15_08-20-12-35_863.log` ainda não contém SIGSEGV ou outro sinal fatal. Em duas execuções, `libSDL3.so`/`libmain.so` carregam, a superfície 1600x720 é criada e `SDL_main` termina normalmente cerca de 50 ms após iniciar. A correção Java dos argumentos foi compilada, mas o runtime ainda podia descartar o `--bios` explícito: `resolve_bios_for_runtime()` tratava builds com apenas OpenBIOS bundled como `bundled_only` e ignorava qualquer BIOS explicitamente solicitada antes de validar o arquivo.
+
+O patch seguinte aceita no Android o caminho absoluto do OpenBIOS fornecido pelo `GameActivity` quando o arquivo existe e seu CRC/tamanho correspondem ao backend bundled. Também encaminha ao Logcat os argumentos efetivos, a resolução/identidade do BIOS e o caminho final do disco, além de vincular a biblioteca NDK `log`. Isso tornará visível a próxima condição de retorno caso o boot ainda não avance.
+

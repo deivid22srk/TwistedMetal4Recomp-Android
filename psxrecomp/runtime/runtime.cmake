@@ -1412,7 +1412,7 @@ function(psxrecomp_add_runtime_target target)
             # glReadBuffer and framebuffer operations from the ES 3 profile.
             # SDL3 creates the EGL context; link the platform GLES3/EGL ABI so
             # those symbols resolve in libmain.so.
-            target_link_libraries(${target} PRIVATE GLESv3 EGL)
+            target_link_libraries(${target} PRIVATE GLESv3 EGL log)
         else()
             find_package(OpenGL)
             if(OpenGL_FOUND)

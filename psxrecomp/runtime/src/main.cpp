@@ -114,6 +114,10 @@ extern "C" void psx_game_codegen_relaunch_or_exit(const char* disc_path);
 #include <unordered_map>
 #include <vector>
 
+#if defined(__ANDROID__)
+#include <android/log.h>
+#endif
+
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -1836,6 +1840,10 @@ static void write_cached_path(const char* argv0, const char* filename,
 
 static void launcher_warning(const char* title, const std::string& msg) {
     std::fprintf(stderr, "%s: %s\n", title, msg.c_str());
+#if defined(__ANDROID__)
+    __android_log_print(ANDROID_LOG_ERROR, "TwistedMetal4", "%s: %s",
+                        title, msg.c_str());
+#endif
 #ifdef _WIN32
     // Headless (--headless / PSX_HEADLESS): NEVER pop a blocking modal — it would
     // hang an unattended/CI/scripted run forever waiting for a click.
@@ -1845,6 +1853,10 @@ static void launcher_warning(const char* title, const std::string& msg) {
 
 static void launcher_info(const char* title, const std::string& msg) {
     std::fprintf(stderr, "%s: %s\n", title, msg.c_str());
+#if defined(__ANDROID__)
+    __android_log_print(ANDROID_LOG_INFO, "TwistedMetal4", "%s: %s",
+                        title, msg.c_str());
+#endif
 #ifdef _WIN32
     if (!g_headless) MessageBoxA(NULL, msg.c_str(), title, MB_OK | MB_ICONINFORMATION);
 #endif
@@ -2075,6 +2087,31 @@ static std::filesystem::path resolve_bios_for_runtime(const char* requested,
                                                       const char* argv0,
                                                       bool requested_is_explicit) {
     const bool openbios_allowed = s_openbios_allowed;
+
+#if defined(__ANDROID__)
+    /* GameActivity supplies the bundled OpenBIOS from Context.getFilesDir().
+     * Product builds intentionally ignore stale explicit BIOS selections when
+     * only the bundled backend is linked, but that policy must not discard this
+     * app-owned absolute path: argv[0] is libmain.so's read-only directory on
+     * Android, not the app's filesDir. */
+    if (requested_is_explicit && requested && requested[0]) {
+        const std::filesystem::path android_requested =
+            resolve_bios_path(requested, argv0);
+        const PsxBiosBackend* bundled = psx_bios_bundled();
+        __android_log_print(ANDROID_LOG_INFO, "TwistedMetal4",
+                            "Android BIOS request=%s resolved=%s exists=%d bundled=%p",
+                            requested, android_requested.string().c_str(),
+                            (!android_requested.empty() &&
+                             std::filesystem::exists(android_requested)) ? 1 : 0,
+                            (void*)bundled);
+        if (bundled && !android_requested.empty() &&
+            std::filesystem::exists(android_requested) &&
+            bios_backend_for_file(android_requested, nullptr, nullptr) == bundled &&
+            psx_bios_activate(bundled)) {
+            return android_requested;
+        }
+    }
+#endif
     const PsxBiosBackend* bundled = psx_bios_bundled();
     const bool player_bios_selectable = psx_bios_has_selectable() != 0;
     const bool bundled_only =
@@ -10071,6 +10108,11 @@ int main(int argc, char** argv) {
     std::setvbuf(stderr, nullptr, _IOLBF, 0);
     std::fprintf(stderr, "psxrecomp: main() entered\n");
     std::fflush(stderr);
+#if defined(__ANDROID__)
+    __android_log_print(ANDROID_LOG_INFO, "TwistedMetal4",
+                        "main entered argc=%d argv0=%s", argc,
+                        (argc > 0 && argv[0]) ? argv[0] : "(null)");
+#endif
 #if defined(RECOMP_LAUNCHER)
     launcher_boot_timing_mark("host:main_enter");
 #endif
@@ -10195,6 +10237,12 @@ int main(int argc, char** argv) {
             }
         }
     }
+#if defined(__ANDROID__)
+    for (int i = 1; i < argc; ++i) {
+        __android_log_print(ANDROID_LOG_INFO, "TwistedMetal4",
+                            "argv[%d]=%s", i, argv[i] ? argv[i] : "(null)");
+    }
+#endif
     if (const char *e = std::getenv("PSX_HEADLESS")) {
         if (e[0] && e[0] != '0') {
             g_headless = 1;
@@ -11954,12 +12002,24 @@ int main(int argc, char** argv) {
 
     std::filesystem::path resolved_bios =
         resolve_bios_for_runtime(bios_path, argv[0], bios_explicit);
+#if defined(__ANDROID__)
+    __android_log_print(ANDROID_LOG_INFO, "TwistedMetal4",
+                        "resolved BIOS=%s explicit=%d",
+                        resolved_bios.empty() ? "(empty)" : resolved_bios.string().c_str(),
+                        bios_explicit ? 1 : 0);
+#endif
     if (resolved_bios.empty()) {
         std::fprintf(stderr, "psxrecomp: no BIOS selected; exiting.\n");
         return 1;
     }
     if (game_config_path || disc_override_path || !resolved_disc.empty()) {
         resolved_disc = resolve_disc_for_runtime(resolved_disc, disc_override_path, game_id, argv[0]);
+#if defined(__ANDROID__)
+        __android_log_print(ANDROID_LOG_INFO, "TwistedMetal4",
+                            "resolved disc=%s override=%d",
+                            resolved_disc.empty() ? "(empty)" : resolved_disc.string().c_str(),
+                            (disc_override_path && disc_override_path[0]) ? 1 : 0);
+#endif
         if (game_config_path && resolved_disc.empty()) {
             std::fprintf(stderr, "psxrecomp: no disc image selected; exiting.\n");
             return 1;
