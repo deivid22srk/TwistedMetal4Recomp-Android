@@ -1753,7 +1753,7 @@ function(psxrecomp_add_game_runtime target)
     set(_psxg_extras ${PSXG_CODEGEN_SETUP_SOURCES})
     if(ANDROID)
         list(APPEND _psxg_extras
-            "${CMAKE_CURRENT_LIST_DIR}/../../android/psxrecomp_codegen_host_stub.c")
+            "${PSXRECOMP_ROOT}/../android/psxrecomp_codegen_host_stub.c")
     else()
         list(APPEND _psxg_extras
             "${PSXRECOMP_ROOT}/host/psxrecomp_codegen_host.c")
