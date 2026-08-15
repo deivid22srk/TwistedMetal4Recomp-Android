@@ -111,6 +111,20 @@ jobs:
           file "$MAIN_SO" "$SDL_SO"
           echo "Native libraries built: $MAIN_SO and $SDL_SO"
 
+      - name: Stage native libraries for APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          MAIN_SO="$(find android/app/build -type f -path '*/obj/arm64-v8a/libmain.so' | head -n1)"
+          SDL_SO="$(find android/app/build -type f -path '*/obj/arm64-v8a/libSDL3.so' | head -n1)"
+          test -s "$MAIN_SO"
+          test -s "$SDL_SO"
+          OUT="android/app/src/main/jniLibs/arm64-v8a"
+          mkdir -p "$OUT"
+          cp "$MAIN_SO" "$OUT/libmain.so"
+          cp "$SDL_SO" "$OUT/libSDL3.so"
+          file "$OUT/libmain.so" "$OUT/libSDL3.so"
+
       - name: Package release APK
         working-directory: android
         env:
