@@ -34,6 +34,14 @@ android {
         }
     }
 
+    sourceSets {
+        main {
+            // The CI stages the verified CMake outputs here so SDLActivity
+            // and the APK package both use the same libmain/libSDL3 pair.
+            jniLibs.srcDirs = ['src/main/jniLibs']
+        }
+    }
+
     buildTypes {
         debug {
             minifyEnabled false

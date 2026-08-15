@@ -139,7 +139,7 @@ jobs:
           test -s "$APK"
           echo "Native libraries packaged in APK:"
           zipinfo -1 "$APK" > /tmp/twistedmetal4-apk-files.txt
-          grep '^lib/' /tmp/twistedmetal4-apk-files.txt | sort
+          grep '^lib/' /tmp/twistedmetal4-apk-files.txt | sort || true
           grep -Fx 'lib/arm64-v8a/libmain.so' /tmp/twistedmetal4-apk-files.txt
           grep -Fx 'lib/arm64-v8a/libSDL3.so' /tmp/twistedmetal4-apk-files.txt
           "${ANDROID_HOME}/build-tools/${ANDROID_BUILD_TOOLS}/aapt2" dump packagename "$APK" || true
