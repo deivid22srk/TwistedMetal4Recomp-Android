@@ -1071,6 +1071,17 @@ bool mod_runtime_clear_for_netplay(std::string* error) {
 }
 
 bool mod_runtime_commit(const std::filesystem::path& disc_path, std::string* error) {
+#if defined(__ANDROID__)
+    /* The Android port currently runs the vanilla game without the desktop
+     * mod manager. In particular, do not fingerprint/parse the user-selected
+     * CUE here: the NDK libc++ filebuf path can crash on some Android 15
+     * devices before the CD mount is initialized. The regular cdrom_init path
+     * below still consumes the validated local CUE/BIN copy. */
+    (void)disc_path;
+    if (error) error->clear();
+    std::fprintf(stdout, "psxrecomp: Android vanilla mode; mod commit skipped\n");
+    return true;
+#else
     RuntimeMods& s = state();
     if (!s.initialized) return true;
     if (disc_path != s.disc_path) {
@@ -1121,6 +1132,7 @@ bool mod_runtime_commit(const std::filesystem::path& disc_path, std::string* err
     s.main_applied = false;
     s.error.clear();
     return true;
+#endif
 }
 
 const std::string& mod_runtime_fingerprint() {

@@ -27,3 +27,10 @@ As alterações do runtime psxrecomp foram vendorizadas no repositório do port 
 
 A verificação real em dispositivo Android ainda depende de um aparelho/emulador externo disponível; o sandbox não possui um dispositivo Android conectado.
 
+
+## Crash após seleção da pasta no Android
+
+Log fornecido do Moto G34 5G / Android SDK 35: `libmain.so` e `libSDL3.so` carregavam corretamente, mas o thread SDL recebeu SIGSEGV dentro de `std::__ndk1::basic_filebuf::~basic_filebuf`, chamado por `PSXRecompV4::parse_cue_sheet` → `resolve_disc_path` → `sha256_file` → `mod_runtime_commit`, antes de `cdrom_init`. Os avisos sobre `libdolphin.so` e propriedades de display não eram a causa do crash.
+
+A correção Android-only desativa o commit/fingerprint do gerenciador de mods no Android, que não é usado pelo launcher vanilla do APK, e deixa o caminho normal `cdrom_init` consumir a cópia CUE/BIN no armazenamento privado. O comportamento desktop permanece inalterado. O novo CI precisa confirmar esse caminho sem acessar o parser de CUE durante o commit de mods.
+
