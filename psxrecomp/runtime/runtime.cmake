@@ -1407,9 +1407,16 @@ function(psxrecomp_add_runtime_target target)
         if(CMAKE_DL_LIBS)
             target_link_libraries(${target} PRIVATE ${CMAKE_DL_LIBS})
         endif()
-        find_package(OpenGL)
-        if(OpenGL_FOUND)
-            target_link_libraries(${target} PRIVATE OpenGL::GL)
+        if(ANDROID)
+            # Android does not provide desktop OpenGL::GL. The SDL3 Android
+            # window creates an EGL context; link the platform GLES2/EGL ABI so
+            # the renderer symbols resolve in libmain.so.
+            target_link_libraries(${target} PRIVATE GLESv2 EGL)
+        else()
+            find_package(OpenGL)
+            if(OpenGL_FOUND)
+                target_link_libraries(${target} PRIVATE OpenGL::GL)
+            endif()
         endif()
         # Async lobby connect (psx_lobby_client.c) uses pthread on Unix.
         if(PSXRECOMP_HAS_LOBBY_CLIENT)
