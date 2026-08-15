@@ -135,7 +135,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          APK="android/app/build/outputs/apk/release/app-release.apk"
+          APK="$(find android/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          test -n "$APK"
           test -s "$APK"
           echo "Native libraries packaged in APK:"
           zipinfo -1 "$APK" > /tmp/twistedmetal4-apk-files.txt
@@ -149,6 +150,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: twisted-metal-4-recompiled-android-arm64-release
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
