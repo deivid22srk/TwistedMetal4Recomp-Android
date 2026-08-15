@@ -16,6 +16,10 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+
         externalNativeBuild {
             cmake {
                 arguments "-DANDROID_PLATFORM=android-21",
@@ -63,7 +67,7 @@ android {
 
     packaging {
         jniLibs {
-            useLegacyPackaging = false
+            useLegacyPackaging = true
         }
         resources {
             excludes += ['/META-INF/{AL2.0,LGPL2.1}']
