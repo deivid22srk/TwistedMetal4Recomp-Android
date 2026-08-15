@@ -42,9 +42,13 @@ public final class GameActivity extends SDLActivity {
         String disc = getSharedPreferences(PREFS, MODE_PRIVATE)
                 .getString(PREF_DISC, "");
         String root = getFilesDir().getAbsolutePath();
+        String bios = new File(root, "bios/openbios.bin").getAbsolutePath();
+        String saves = new File(root, "saves").getAbsolutePath();
         return new String[] {
                 "--game", new File(root, "game.toml").getAbsolutePath(),
                 "--disc", disc,
+                "--bios", bios,
+                "--memcard-dir", saves,
                 "--no-launcher",
                 "--renderer", "opengl"
         };

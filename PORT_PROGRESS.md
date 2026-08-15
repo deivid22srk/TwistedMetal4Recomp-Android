@@ -34,3 +34,11 @@ Log fornecido do Moto G34 5G / Android SDK 35: `libmain.so` e `libSDL3.so` carre
 
 A correção Android-only desativa o commit/fingerprint do gerenciador de mods no Android, que não é usado pelo launcher vanilla do APK, e deixa o caminho normal `cdrom_init` consumir a cópia CUE/BIN no armazenamento privado. O comportamento desktop permanece inalterado. O novo CI precisa confirmar esse caminho sem acessar o parser de CUE durante o commit de mods.
 
+## Segundo log do dispositivo: encerramento normal antes da janela
+
+O log `hhhhh15_08-20-01-21_862.log` não contém sinal fatal nem stack trace. Em duas tentativas, SDL carregou `libSDL3.so` e `libmain.so`, criou a superfície 1600x720 e iniciou `SDL_main`, mas `Finished main function` ocorreu aproximadamente 16 ms depois; em seguida a `GameActivity` foi destruída. Isso indica retorno antecipado do runtime, não crash de memória.
+
+A causa foi identificada no caminho de BIOS. `GameActivity` passava `--game` e `--disc`, mas não passava `--bios`; o fallback `bios/openbios.bin` era resolvido relativo a `argv[0]`, que no SDL Android é o caminho da biblioteca em `/data/app/.../lib/arm64`, enquanto o OpenBIOS está em `Context.getFilesDir()/bios/openbios.bin`. O diretório padrão de memory cards também seguia `argv[0]`, potencialmente apontando para uma área somente leitura.
+
+Correção aplicada em `GameActivity.getArguments()`: passar `--bios <filesDir>/bios/openbios.bin` e `--memcard-dir <filesDir>/saves` explicitamente, além dos argumentos já existentes. Os avisos sobre `libdolphin.so`, `vendor.display.enable_optimal_refresh_rate`, `Unknown dataspace 0` e driver Adreno são secundários e não explicam o encerramento.
+
