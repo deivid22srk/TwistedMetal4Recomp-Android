@@ -146,15 +146,6 @@ jobs:
           "${ANDROID_HOME}/build-tools/${ANDROID_BUILD_TOOLS}/aapt2" dump packagename "$APK" || true
           ls -lh "$APK"
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        continue-on-error: true
-        with:
-          name: twisted-metal-4-recompiled-android-arm64-release
-          path: android/app/build/outputs/apk/release/*.apk
-          if-no-files-found: error
-          retention-days: 30
-
       - name: Publish APK as GitHub Release asset
         if: ${{ success() }}
         shell: bash
