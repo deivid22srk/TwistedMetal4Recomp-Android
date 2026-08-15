@@ -1449,9 +1449,17 @@ static void update_adaptive_widescreen() {
  * runtime requirements immediately before every GL window, because launcher
  * teardown resets them and macOS otherwise supplies a legacy 2.1 context. */
 static void configure_core_gl_context_attributes() {
+#if defined(__ANDROID__)
+    /* Android's SDL video backend creates an EGL context. Request ES 3.0
+     * rather than desktop Core 3.3; the renderer uses ES3 framebuffer APIs. */
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#else
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+#endif
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 }

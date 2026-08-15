@@ -1408,10 +1408,11 @@ function(psxrecomp_add_runtime_target target)
             target_link_libraries(${target} PRIVATE ${CMAKE_DL_LIBS})
         endif()
         if(ANDROID)
-            # Android does not provide desktop OpenGL::GL. The SDL3 Android
-            # window creates an EGL context; link the platform GLES2/EGL ABI so
-            # the renderer symbols resolve in libmain.so.
-            target_link_libraries(${target} PRIVATE GLESv2 EGL)
+            # Android does not provide desktop OpenGL::GL. The renderer uses
+            # glReadBuffer and framebuffer operations from the ES 3 profile.
+            # SDL3 creates the EGL context; link the platform GLES3/EGL ABI so
+            # those symbols resolve in libmain.so.
+            target_link_libraries(${target} PRIVATE GLESv3 EGL)
         else()
             find_package(OpenGL)
             if(OpenGL_FOUND)
