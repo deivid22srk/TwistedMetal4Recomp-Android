@@ -52,6 +52,11 @@
 
     <!-- Allow access to the vibrator -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Android 12+ requires runtime Bluetooth permissions for paired gamepads. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
 
     <!-- Allow access to Internet -->
     <!-- if you want to connect to the network or internet, uncomment this. -->

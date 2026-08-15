@@ -3771,6 +3771,20 @@ static void refresh_player_devices(void) {
          * Multitap taps are always digital (see sio_pad_on_multitap). */
         sio_set_pad_config_capable(s, mode != PSXRecompV4::PAD_MODE_DIGITAL);
     }
+#if defined(__ANDROID__)
+    const int n = SDL_NumJoysticks();
+    __android_log_print(ANDROID_LOG_INFO, "TwistedMetal4",
+                        "controller scan joysticks=%d p1_kind=%d p1_handle=%p",
+                        n, g_players[0].kind, (void*)g_players[0].handle);
+    for (int i = 0; i < n; ++i) {
+        const SDL_JoystickID id = SDL_JoystickGetDeviceInstanceID(i);
+        const char* name = SDL_GetGamepadNameForID(id);
+        __android_log_print(ANDROID_LOG_INFO, "TwistedMetal4",
+                            "controller[%d] id=%lld game=%d name=%s",
+                            i, (long long)id, SDL_IsGameController(i) ? 1 : 0,
+                            name ? name : "(unnamed)");
+    }
+#endif
 }
 
 /* Parse a [controller] device string into a player slot:
@@ -10292,7 +10306,12 @@ int main(int argc, char** argv) {
     int  player_deadzone[PSX_MAX_PLAYERS];
     int  ctrl_locked_mode[PSX_MAX_PLAYERS];
     for (int i = 0; i < PSX_MAX_PLAYERS; ++i) {
-#if defined(PSX_DEBUG_TOOLS)
+#if defined(__ANDROID__)
+        /* Mobile priority: route the first physical Bluetooth/USB SDL
+         * GameController to P1. Touch remains the fallback through the native
+         * finger-region mapper. Desktop release keeps its keyboard default. */
+        player_device[i] = (i == 0) ? "auto" : "none";
+#elif defined(PSX_DEBUG_TOOLS)
         player_device[i] = (i == 0) ? "auto" : "none";
 #else
         player_device[i] = (i == 0) ? "keyboard" : "none";
@@ -12455,6 +12474,13 @@ session_reboot:
     psx_set_midframe_audio_pump(sdl_audio_pump_midframe);
 #endif
 
+#if defined(__ANDROID__)
+    /* Android has no useful windowed mode for the game surface: use the
+     * borderless desktop fullscreen path so the 4:3 image is letterboxed by
+     * the renderer across the complete landscape display. Java immersive mode
+     * hides the system bars; this SDL flag makes the surface fill the window. */
+    g_fullscreen = 1;
+#endif
     Uint32 win_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
     if (g_video_renderer == 1) {
         configure_core_gl_context_attributes();

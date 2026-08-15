@@ -48,3 +48,9 @@ O log `psps15_08-20-12-35_863.log` ainda não contém SIGSEGV ou outro sinal fat
 
 O patch seguinte aceita no Android o caminho absoluto do OpenBIOS fornecido pelo `GameActivity` quando o arquivo existe e seu CRC/tamanho correspondem ao backend bundled. Também encaminha ao Logcat os argumentos efetivos, a resolução/identidade do BIOS e o caminho final do disco, além de vincular a biblioteca NDK `log`. Isso tornará visível a próxima condição de retorno caso o boot ainda não avance.
 
+## Interface e input após o primeiro boot estável
+
+O log `rodando15_08-20-39-39_428.log` confirma boot estável: BIOS e CUE são resolvidos, áudio AAudio abre corretamente e o jogo permanece ativo por mais de um minuto. A linha SDL `setOrientation() requestedOrientation=13 width=960 height=720 resizable=true` confirma que a janela estava em modo redimensionável, sem fullscreen. O código de touch existente apenas convertia dedos em botões; não havia nenhuma rotina de desenho do virtual gamepad. O default de release Android também deixava P1 como `keyboard`, enquanto somente builds de debug usavam `auto`.
+
+Correções implementadas: `GameActivity` agora reaplica fullscreen imersivo e oculta barras de status/navegação; o runtime força `SDL_WINDOW_FULLSCREEN_DESKTOP` somente no Android; foi criada `TouchOverlayView`, uma camada visual com D-pad, face buttons, L1/R1, Select e Start que não intercepta os eventos SDL; P1 Android passa a usar `auto` para abrir o primeiro SDL GameController; e o Manifest/GameActivity solicitam Bluetooth Connect/Scan em Android 12+ para gamepads pareados. O runtime também registra no Logcat a contagem de joysticks, se cada dispositivo é GameController e qual controle foi aberto no P1.
+
