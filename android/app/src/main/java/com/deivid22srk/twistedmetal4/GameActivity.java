@@ -5,6 +5,9 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.InputDevice;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -25,6 +28,18 @@ import java.util.ArrayList;
 public final class GameActivity extends SDLActivity {
     private static final String PREFS = "twistedmetal4";
     private static final String PREF_DISC = "disc_path";
+    private TouchOverlayView touchOverlay;
+    private final Handler overlayHandler = new Handler(Looper.getMainLooper());
+    private final Runnable overlayVisibilityPoll = new Runnable() {
+        @Override
+        public void run() {
+            if (touchOverlay != null) {
+                touchOverlay.setVisibility(hasPhysicalGamepad()
+                        ? View.GONE : View.VISIBLE);
+            }
+            overlayHandler.postDelayed(this, 500L);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle state) {
@@ -37,11 +52,32 @@ public final class GameActivity extends SDLActivity {
         requestControllerPermissions();
         enterImmersiveFullscreen();
         if (mLayout != null) {
-            TouchOverlayView overlay = new TouchOverlayView(this);
-            mLayout.addView(overlay, new ViewGroup.LayoutParams(
+            touchOverlay = new TouchOverlayView(this);
+            mLayout.addView(touchOverlay, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
+            overlayVisibilityPoll.run();
         }
+    }
+
+    private boolean hasPhysicalGamepad() {
+        for (int id : InputDevice.getDeviceIds()) {
+            InputDevice device = InputDevice.getDevice(id);
+            if (device == null) continue;
+            int sources = device.getSources();
+            if ((sources & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+                    || (sources & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    protected void onDestroy() {
+        overlayHandler.removeCallbacks(overlayVisibilityPoll);
+        touchOverlay = null;
+        super.onDestroy();
     }
 
     @Override

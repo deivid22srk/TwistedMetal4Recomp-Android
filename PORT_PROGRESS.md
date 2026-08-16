@@ -54,3 +54,9 @@ O log `rodando15_08-20-39-39_428.log` confirma boot estável: BIOS e CUE são re
 
 Correções implementadas: `GameActivity` agora reaplica fullscreen imersivo e oculta barras de status/navegação; o runtime força `SDL_WINDOW_FULLSCREEN_DESKTOP` somente no Android; foi criada `TouchOverlayView`, uma camada visual com D-pad, face buttons, L1/R1, Select e Start que não intercepta os eventos SDL; P1 Android passa a usar `auto` para abrir o primeiro SDL GameController; e o Manifest/GameActivity solicitam Bluetooth Connect/Scan em Android 12+ para gamepads pareados. O runtime também registra no Logcat a contagem de joysticks, se cada dispositivo é GameController e qual controle foi aberto no P1.
 
+## Layout touch revisado e visibilidade por gamepad
+
+A captura fornecida mostrou que os botões grandes sobrepunham o HUD central e que L2/R2 não estavam disponíveis. O novo layout usa as barras pretas laterais do formato 20:9: D-pad no lado esquerdo, face buttons no lado direito, L2/L1 empilhados no topo esquerdo, R2/R1 no topo direito e Select/Start no topo central. A função nativa `android_touch_region()` foi alinhada às mesmas regiões normalizadas da `TouchOverlayView`, incluindo L2/R2.
+
+A `GameActivity` agora consulta os dispositivos Android a cada 500 ms. Se existir uma fonte `SOURCE_GAMEPAD` ou `SOURCE_JOYSTICK`, o overlay fica `GONE`; quando todos os gamepads são desconectados, ele volta a `VISIBLE`. O SDL continua recebendo os eventos touch quando o overlay está visível, e o overlay não intercepta eventos.
+

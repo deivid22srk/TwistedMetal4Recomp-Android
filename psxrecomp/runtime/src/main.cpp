@@ -3920,32 +3920,34 @@ static uint16_t g_android_touch_buttons = 0xFFFF;
 static int g_android_touch_count = 0;
 
 static uint16_t android_touch_region(float x, float y) {
-    /* D-pad cluster: lower-left. */
-    const float ddx = x - 0.18f;
-    const float ddy = y - 0.68f;
-    if ((ddx * ddx + ddy * ddy) < 0.060f) {
+    /* Match TouchOverlayView: D-pad in the left side rail. */
+    const float ddx = x - 0.095f;
+    const float ddy = y - 0.70f;
+    if ((ddx * ddx + ddy * ddy) < 0.015f) {
         if (std::fabs(ddx) > std::fabs(ddy))
             return ddx < 0.0f ? (uint16_t)~PAD_LEFT : (uint16_t)~PAD_RIGHT;
         return ddy < 0.0f ? (uint16_t)~PAD_UP : (uint16_t)~PAD_DOWN;
     }
 
-    /* Face cluster: lower-right, arranged like a PlayStation pad. */
-    const float fdx = x - 0.82f;
-    const float fdy = y - 0.68f;
-    if ((fdx * fdx + fdy * fdy) < 0.075f) {
+    /* Face cluster in the right side rail. */
+    const float fdx = x - 0.905f;
+    const float fdy = y - 0.70f;
+    if ((fdx * fdx + fdy * fdy) < 0.015f) {
         if (std::fabs(fdx) > std::fabs(fdy))
             return fdx < 0.0f ? (uint16_t)~PAD_SQUARE : (uint16_t)~PAD_CIRCLE;
         return fdy < 0.0f ? (uint16_t)~PAD_TRIANGLE : (uint16_t)~PAD_CROSS;
     }
 
-    /* Shoulder strips. */
-    if (x < 0.30f && y < 0.20f) return (uint16_t)~PAD_L1;
-    if (x > 0.70f && y < 0.20f) return (uint16_t)~PAD_R1;
+    /* Shoulder pairs in the top side rails. */
+    if (x < 0.16f && y < 0.12f) return (uint16_t)~PAD_L2;
+    if (x < 0.16f && y < 0.21f) return (uint16_t)~PAD_L1;
+    if (x > 0.84f && y < 0.12f) return (uint16_t)~PAD_R2;
+    if (x > 0.84f && y < 0.21f) return (uint16_t)~PAD_R1;
 
-    /* Central utility buttons. */
-    if (x > 0.43f && x < 0.57f && y > 0.30f && y < 0.49f)
+    /* Select and Start in the top-center utility strip. */
+    if (x > 0.435f && x < 0.565f && y > 0.02f && y < 0.10f)
         return (uint16_t)~PAD_SELECT;
-    if (x > 0.43f && x < 0.57f && y > 0.52f && y < 0.72f)
+    if (x > 0.435f && x < 0.565f && y > 0.11f && y < 0.19f)
         return (uint16_t)~PAD_START;
     return 0xFFFF;
 }
