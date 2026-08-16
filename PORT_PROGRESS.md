@@ -60,3 +60,9 @@ A captura fornecida mostrou que os botões grandes sobrepunham o HUD central e q
 
 A `GameActivity` agora consulta os dispositivos Android a cada 500 ms. Se existir uma fonte `SOURCE_GAMEPAD` ou `SOURCE_JOYSTICK`, o overlay fica `GONE`; quando todos os gamepads são desconectados, ele volta a `VISIBLE`. O SDL continua recebendo os eventos touch quando o overlay está visível, e o overlay não intercepta eventos.
 
+## Branch de UI avançada: HUD, drawer e analógico virtual
+
+A nova implementação está isolada na branch `android-ui-settings`, derivada do `master` estável. O `TouchOverlayView` foi redesenhado com cores discretas por botão PlayStation, contorno/glow, botão de abertura do drawer e modo visual de analógico. O `SettingsDrawerView` é um painel Android nativo sobre a Activity SDL e oferece fullscreen, visibilidade do HUD, D-pad/analógico, ocultação automática com gamepad e opacidade do HUD. As opções são salvas em `SharedPreferences` e aplicadas novamente na próxima execução.
+
+O modo analógico não é apenas visual: o runtime recebe `--android-touch-mode`, mantém a posição do dedo na zona esquerda e converte o deslocamento em eixos DualShock com deadzone radial. A troca durante a execução usa JNI; fullscreen usa uma fila atômica processada na thread SDL para chamar `SDL_SetWindowFullscreen` com segurança. A branch será publicada e validada pelo `build.yml` antes de qualquer merge no `master`.
+

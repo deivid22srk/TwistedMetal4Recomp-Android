@@ -116,6 +116,7 @@ extern "C" void psx_game_codegen_relaunch_or_exit(const char* disc_path);
 
 #if defined(__ANDROID__)
 #include <android/log.h>
+#include <jni.h>
 #endif
 
 #ifdef _WIN32
@@ -3914,12 +3915,44 @@ static void axes_to_pad_pair(int16_t vx, int16_t vy, uint8_t* obx, uint8_t* oby,
  * Coordinates are normalized SDL finger coordinates in landscape. Every finger
  * owns one region, so D-pad + face buttons can be held simultaneously. */
 static bool g_android_touch_active[8] = {};
+static bool g_android_touch_analog[8] = {};
 static SDL_FingerID g_android_touch_ids[8] = {};
+static float g_android_touch_x[8] = {};
+static float g_android_touch_y[8] = {};
 static uint16_t g_android_touch_masks[8] = {};
 static uint16_t g_android_touch_buttons = 0xFFFF;
 static int g_android_touch_count = 0;
+static std::atomic<int> g_android_touch_mode{0}; /* 0=D-pad, 1=analog */
+static std::atomic<int> g_android_fullscreen_request{-1};
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_deivid22srk_twistedmetal4_GameActivity_nativeSetAndroidTouchMode(
+    JNIEnv*, jclass, jint mode) {
+    g_android_touch_mode.store(mode ? 1 : 0, std::memory_order_release);
+#if defined(__ANDROID__)
+    __android_log_print(ANDROID_LOG_INFO, "TwistedMetal4",
+                        "touch control mode=%s", mode ? "analog" : "dpad");
+#endif
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_deivid22srk_twistedmetal4_GameActivity_nativeSetAndroidFullscreen(
+    JNIEnv*, jclass, jint enabled) {
+    g_android_fullscreen_request.store(enabled ? 1 : 0, std::memory_order_release);
+}
+
+static bool android_touch_left_zone(float x, float y) {
+    const float dx = x - 0.095f;
+    const float dy = y - 0.70f;
+    return (dx * dx + dy * dy) < 0.024f;
+}
 
 static uint16_t android_touch_region(float x, float y) {
+    /* In analog mode the whole left stick zone is reserved for its axes. */
+    if (g_android_touch_mode.load(std::memory_order_acquire) != 0 &&
+        android_touch_left_zone(x, y))
+        return 0xFFFF;
+
     /* Match TouchOverlayView: D-pad in the left side rail. */
     const float ddx = x - 0.095f;
     const float ddy = y - 0.70f;
@@ -3962,6 +3995,23 @@ static void android_touch_refresh_buttons(void) {
     }
 }
 
+static bool android_touch_get_stick(int16_t* out_x, int16_t* out_y) {
+    if (g_android_touch_mode.load(std::memory_order_acquire) == 0)
+        return false;
+    for (int i = 0; i < 8; ++i) {
+        if (!g_android_touch_active[i] || !g_android_touch_analog[i]) continue;
+        const float dx = g_android_touch_x[i] - 0.095f;
+        const float dy = g_android_touch_y[i] - 0.70f;
+        constexpr float kRadius = 0.105f;
+        const float nx = std::max(-1.0f, std::min(1.0f, dx / kRadius));
+        const float ny = std::max(-1.0f, std::min(1.0f, dy / kRadius));
+        *out_x = (int16_t)(nx * 32767.0f);
+        *out_y = (int16_t)(ny * 32767.0f);
+        return true;
+    }
+    return false;
+}
+
 static int android_touch_slot(SDL_FingerID id) {
     for (int i = 0; i < 8; ++i)
         if (g_android_touch_active[i] && g_android_touch_ids[i] == id) return i;
@@ -3974,6 +4024,11 @@ static void android_touch_handle_event(const SDL_Event& ev) {
             if (g_android_touch_active[i]) continue;
             g_android_touch_active[i] = true;
             g_android_touch_ids[i] = ev.tfinger.fingerID;
+            g_android_touch_x[i] = ev.tfinger.x;
+            g_android_touch_y[i] = ev.tfinger.y;
+            g_android_touch_analog[i] =
+                g_android_touch_mode.load(std::memory_order_acquire) != 0 &&
+                android_touch_left_zone(ev.tfinger.x, ev.tfinger.y);
             g_android_touch_masks[i] = android_touch_region(ev.tfinger.x, ev.tfinger.y);
             android_touch_refresh_buttons();
             return;
@@ -3981,6 +4036,11 @@ static void android_touch_handle_event(const SDL_Event& ev) {
     } else if (ev.type == SDL_EVENT_FINGER_MOTION) {
         const int slot = android_touch_slot(ev.tfinger.fingerID);
         if (slot >= 0) {
+            g_android_touch_x[slot] = ev.tfinger.x;
+            g_android_touch_y[slot] = ev.tfinger.y;
+            g_android_touch_analog[slot] =
+                g_android_touch_mode.load(std::memory_order_acquire) != 0 &&
+                android_touch_left_zone(ev.tfinger.x, ev.tfinger.y);
             g_android_touch_masks[slot] =
                 android_touch_region(ev.tfinger.x, ev.tfinger.y);
             android_touch_refresh_buttons();
@@ -3990,7 +4050,10 @@ static void android_touch_handle_event(const SDL_Event& ev) {
         const int slot = android_touch_slot(ev.tfinger.fingerID);
         if (slot >= 0) {
             g_android_touch_active[slot] = false;
+            g_android_touch_analog[slot] = false;
             g_android_touch_ids[slot] = 0;
+            g_android_touch_x[slot] = 0.0f;
+            g_android_touch_y[slot] = 0.0f;
             g_android_touch_masks[slot] = 0xFFFF;
             android_touch_refresh_buttons();
         }
@@ -4030,6 +4093,18 @@ static uint16_t pad_buttons_for(const PlayerInput& p, int player, bool suppress_
  * — they are that player's only stick source. */
 static void pad_sticks_for(const PlayerInput& p, int player, uint8_t out[4], bool fold_dpad) {
     out[0] = out[1] = out[2] = out[3] = 0x80;
+#if defined(__ANDROID__) && defined(PSX_SDL3)
+    /* The Android touch stick is a first-class left-axis source for P1. It is
+     * active only when the drawer selects ANALOG and a finger is in the left
+     * stick zone; a physical SDL controller therefore remains authoritative. */
+    if (player == 1) {
+        int16_t vx = 0, vy = 0;
+        if (android_touch_get_stick(&vx, &vy)) {
+            axes_to_pad_pair(vx, vy, &out[0], &out[1], controller_deadzone);
+            return;
+        }
+    }
+#endif
     if (p.kind == 1) {
         /* Keyboard analog: the configurable left/right stick-direction binds
          * (default = arrow keys on the LEFT stick; RIGHT stick unbound), so the
@@ -5886,6 +5961,14 @@ static NetplayVblankEpilogue sdl_vblank_present_body(void) {
     }
 
     if (!g_headless) {
+#if defined(__ANDROID__)
+        const int requested_fullscreen =
+            g_android_fullscreen_request.exchange(-1, std::memory_order_acq_rel);
+        if (requested_fullscreen >= 0 && sdl_window) {
+            SDL_SetWindowFullscreen(sdl_window,
+                requested_fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+        }
+#endif
         /* Pump SDL events to prevent window freeze. */
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
@@ -10165,6 +10248,8 @@ int main(int argc, char** argv) {
      * supplied via --game). -1 = "not set on the CLI". */
     int         cli_debug_port = -1;
     int         cli_renderer   = -1;   /* 0=software 1=opengl 2=vulkan */
+    int         cli_android_fullscreen = -1;
+    int         cli_android_touch_mode = -1; /* 0=dpad, 1=analog */
     const char* cli_window_title = nullptr;  /* label windows in a fleet */
     const char* cli_memcard_dir = nullptr;   /* isolate writable state in a fleet */
     PsxNetplayConfig net_cfg;
@@ -10208,6 +10293,11 @@ int main(int argc, char** argv) {
             if      (std::strcmp(r, "software") == 0) cli_renderer = 0;
             else if (std::strcmp(r, "opengl")   == 0) cli_renderer = 1;
             else if (std::strcmp(r, "vulkan")   == 0) cli_renderer = 2;
+        } else if (std::strcmp(argv[i], "--android-fullscreen") == 0 && i + 1 < argc) {
+            cli_android_fullscreen = std::atoi(argv[++i]) != 0 ? 1 : 0;
+        } else if (std::strcmp(argv[i], "--android-touch-mode") == 0 && i + 1 < argc) {
+            const char* mode = argv[++i];
+            cli_android_touch_mode = (std::strcmp(mode, "analog") == 0) ? 1 : 0;
         } else if (std::strcmp(argv[i], "--window-title") == 0 && i + 1 < argc) {
             cli_window_title = argv[++i];
         } else if (std::strcmp(argv[i], "--launcher") == 0) {
@@ -12011,6 +12101,11 @@ int main(int argc, char** argv) {
      * including BIOS instances that have no [game]-block config. */
     if (cli_debug_port >= 0) debug_port      = (uint16_t)cli_debug_port;
     if (cli_renderer   >= 0) g_video_renderer = cli_renderer;
+#if defined(__ANDROID__)
+    if (cli_android_fullscreen >= 0) g_fullscreen = cli_android_fullscreen;
+    if (cli_android_touch_mode >= 0)
+        g_android_touch_mode.store(cli_android_touch_mode, std::memory_order_release);
+#endif
     if (cli_window_title)    window_title     = cli_window_title;
     if (cli_memcard_dir) {
         memcard_dir = std::filesystem::path(cli_memcard_dir);
@@ -12477,11 +12572,9 @@ session_reboot:
 #endif
 
 #if defined(__ANDROID__)
-    /* Android has no useful windowed mode for the game surface: use the
-     * borderless desktop fullscreen path so the 4:3 image is letterboxed by
-     * the renderer across the complete landscape display. Java immersive mode
-     * hides the system bars; this SDL flag makes the surface fill the window. */
-    g_fullscreen = 1;
+    /* Keep the legacy immersive default when no Android argument is supplied;
+     * GameActivity always supplies the persisted drawer choice explicitly. */
+    if (cli_android_fullscreen < 0) g_fullscreen = 1;
 #endif
     Uint32 win_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
     if (g_video_renderer == 1) {

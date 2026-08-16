@@ -28,14 +28,29 @@ import java.util.ArrayList;
 public final class GameActivity extends SDLActivity {
     private static final String PREFS = "twistedmetal4";
     private static final String PREF_DISC = "disc_path";
+    private static final String PREF_FULLSCREEN = "ui_fullscreen";
+    private static final String PREF_HUD = "ui_hud";
+    private static final String PREF_ANALOG = "ui_analog";
+    private static final String PREF_AUTO_HIDE = "ui_auto_hide";
+    private static final String PREF_OPACITY = "ui_opacity";
+
+    private static native void nativeSetAndroidTouchMode(int mode);
+    private static native void nativeSetAndroidFullscreen(int enabled);
+
     private TouchOverlayView touchOverlay;
+    private SettingsDrawerView settingsDrawer;
+    private boolean fullscreenPreference = true;
+    private boolean hudPreference = true;
+    private boolean analogPreference;
+    private boolean autoHidePreference = true;
+    private float hudOpacity = 0.90f;
     private final Handler overlayHandler = new Handler(Looper.getMainLooper());
     private final Runnable overlayVisibilityPoll = new Runnable() {
         @Override
         public void run() {
             if (touchOverlay != null) {
-                touchOverlay.setVisibility(hasPhysicalGamepad()
-                        ? View.GONE : View.VISIBLE);
+                boolean hide = autoHidePreference && hasPhysicalGamepad();
+                touchOverlay.setVisibility(hide ? View.GONE : View.VISIBLE);
             }
             overlayHandler.postDelayed(this, 500L);
         }
@@ -49,13 +64,69 @@ public final class GameActivity extends SDLActivity {
             throw new RuntimeException("Unable to stage runtime assets", e);
         }
         super.onCreate(state);
+        loadUiPreferences();
         requestControllerPermissions();
-        enterImmersiveFullscreen();
+        applyFullscreenSystemUi(fullscreenPreference);
         if (mLayout != null) {
             touchOverlay = new TouchOverlayView(this);
+            touchOverlay.setControlMode(analogPreference);
+            touchOverlay.setHudVisible(hudPreference);
+            touchOverlay.setHudOpacity(hudOpacity);
+            touchOverlay.setListener(new TouchOverlayView.Listener() {
+                @Override
+                public void onTouchSettingsPressed() { openSettingsDrawer(); }
+            });
             mLayout.addView(touchOverlay, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
+
+            settingsDrawer = new SettingsDrawerView(this);
+            settingsDrawer.setState(fullscreenPreference, hudPreference,
+                    analogPreference, autoHidePreference, hudOpacity);
+            settingsDrawer.setListener(new SettingsDrawerView.Listener() {
+                @Override
+                public void onDrawerFullscreenChanged(boolean enabled) {
+                    fullscreenPreference = enabled;
+                    saveUiPreferences();
+                    applyFullscreen(enabled);
+                }
+
+                @Override
+                public void onDrawerHudChanged(boolean enabled) {
+                    hudPreference = enabled;
+                    if (touchOverlay != null) touchOverlay.setHudVisible(enabled);
+                    saveUiPreferences();
+                }
+
+                @Override
+                public void onDrawerControlModeChanged(boolean analog) {
+                    analogPreference = analog;
+                    if (touchOverlay != null) touchOverlay.setControlMode(analog);
+                    nativeSetAndroidTouchMode(analog ? 1 : 0);
+                    saveUiPreferences();
+                }
+
+                @Override
+                public void onDrawerAutoHideChanged(boolean enabled) {
+                    autoHidePreference = enabled;
+                    saveUiPreferences();
+                    overlayVisibilityPoll.run();
+                }
+
+                @Override
+                public void onDrawerOpacityChanged(float opacity) {
+                    hudOpacity = opacity;
+                    if (touchOverlay != null) touchOverlay.setHudOpacity(opacity);
+                    saveUiPreferences();
+                }
+
+                @Override
+                public void onDrawerClosed() { }
+            });
+            mLayout.addView(settingsDrawer, new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
+            nativeSetAndroidTouchMode(analogPreference ? 1 : 0);
             overlayVisibilityPoll.run();
         }
     }
@@ -77,13 +148,55 @@ public final class GameActivity extends SDLActivity {
     protected void onDestroy() {
         overlayHandler.removeCallbacks(overlayVisibilityPoll);
         touchOverlay = null;
+        settingsDrawer = null;
         super.onDestroy();
     }
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) enterImmersiveFullscreen();
+        if (hasFocus) applyFullscreenSystemUi(fullscreenPreference);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (settingsDrawer != null && settingsDrawer.isOpen()) {
+            settingsDrawer.close();
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    private void loadUiPreferences() {
+        android.content.SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+        fullscreenPreference = p.getBoolean(PREF_FULLSCREEN, true);
+        hudPreference = p.getBoolean(PREF_HUD, true);
+        analogPreference = p.getBoolean(PREF_ANALOG, false);
+        autoHidePreference = p.getBoolean(PREF_AUTO_HIDE, true);
+        hudOpacity = p.getFloat(PREF_OPACITY, 0.90f);
+    }
+
+    private void saveUiPreferences() {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putBoolean(PREF_FULLSCREEN, fullscreenPreference)
+                .putBoolean(PREF_HUD, hudPreference)
+                .putBoolean(PREF_ANALOG, analogPreference)
+                .putBoolean(PREF_AUTO_HIDE, autoHidePreference)
+                .putFloat(PREF_OPACITY, hudOpacity)
+                .apply();
+    }
+
+    private void openSettingsDrawer() {
+        if (settingsDrawer == null) return;
+        settingsDrawer.setState(fullscreenPreference, hudPreference,
+                analogPreference, autoHidePreference, hudOpacity);
+        settingsDrawer.open();
+    }
+
+    private void applyFullscreen(boolean enabled) {
+        applyFullscreenSystemUi(enabled);
+        nativeSetAndroidFullscreen(enabled ? 1 : 0);
+        SDLActivity.setWindowStyle(enabled);
     }
 
     private void requestControllerPermissions() {
@@ -109,21 +222,32 @@ public final class GameActivity extends SDLActivity {
         if (requestCode == 7108) enterImmersiveFullscreen();
     }
 
-    private void enterImmersiveFullscreen() {
+    private void applyFullscreenSystemUi(boolean enabled) {
         Window window = getWindow();
-        window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
-                WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        if (enabled) {
+            window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                    WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            window.setDecorFitsSystemWindows(false);
+            window.setDecorFitsSystemWindows(!enabled);
             WindowInsetsController controller = window.getInsetsController();
             if (controller != null) {
-                controller.hide(WindowInsets.Type.statusBars()
+                int bars = WindowInsets.Type.statusBars()
                         | WindowInsets.Type.navigationBars()
-                        | WindowInsets.Type.displayCutout());
-                controller.setSystemBarsBehavior(
-                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                        | WindowInsets.Type.displayCutout();
+                if (enabled) {
+                    controller.hide(bars);
+                    controller.setSystemBarsBehavior(
+                            WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                } else {
+                    controller.show(bars);
+                    controller.setSystemBarsBehavior(
+                            WindowInsetsController.BEHAVIOR_DEFAULT);
+                }
             }
-        } else {
+        } else if (enabled) {
             window.getDecorView().setSystemUiVisibility(
                     View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                             | View.SYSTEM_UI_FLAG_FULLSCREEN
@@ -131,6 +255,8 @@ public final class GameActivity extends SDLActivity {
                             | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                             | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                             | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        } else {
+            window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         }
     }
 
@@ -152,11 +278,16 @@ public final class GameActivity extends SDLActivity {
         String root = getFilesDir().getAbsolutePath();
         String bios = new File(root, "bios/openbios.bin").getAbsolutePath();
         String saves = new File(root, "saves").getAbsolutePath();
+        android.content.SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+        boolean initialFullscreen = p.getBoolean(PREF_FULLSCREEN, true);
+        boolean initialAnalog = p.getBoolean(PREF_ANALOG, false);
         return new String[] {
                 "--game", new File(root, "game.toml").getAbsolutePath(),
                 "--disc", disc,
                 "--bios", bios,
                 "--memcard-dir", saves,
+                "--android-fullscreen", initialFullscreen ? "1" : "0",
+                "--android-touch-mode", initialAnalog ? "analog" : "dpad",
                 "--no-launcher",
                 "--renderer", "opengl"
         };
