@@ -219,7 +219,7 @@ public final class GameActivity extends SDLActivity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions,
                                            int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == 7108) enterImmersiveFullscreen();
+        if (requestCode == 7108) applyFullscreenSystemUi(fullscreenPreference);
     }
 
     private void applyFullscreenSystemUi(boolean enabled) {
